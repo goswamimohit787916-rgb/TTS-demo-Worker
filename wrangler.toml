@@ -1,8 +1,30 @@
-name = "qwen3-tts-worker"
-compatibility_date = "2026-03-01"
-d1_databases = [
-  { binding = "DB", database_name = "qwen3-tts-db" }
-]
+export default {
+  async fetch(request, env) {
+    if (request.method === "OPTIONS") return new Response(null, { headers: { "Access-Control-Allow-Origin": "*" } });
 
-# Run this command after deploy:
-# wrangler secret put REPLICATE_API_TOKEN
+    // 1. Extract data from Frontend
+    const formData = await request.formData();
+    const text = formData.get('text');
+    const speed = formData.get('speed');
+    const refAudio = formData.get('ref_audio'); // This is the file for cloning
+
+    // 2. Prepare Payload for Qwen3-1.7B Engine
+    // We send this to your GPU server running the Qwen3 Inference API
+    const gpuPayload = new FormData();
+    gpuPayload.append("text", text);
+    gpuPayload.append("speed", speed);
+    if (refAudio) gpuPayload.append("reference_audio", refAudio);
+
+    const response = await fetch(`${env.GPU_URL}/generate`, {
+      method: "POST",
+      headers: { "Authorization": `Bearer ${env.API_KEY}` },
+      body: gpuPayload
+    });
+
+    const audio = await response.arrayBuffer();
+
+    return new Response(audio, {
+      headers: { "Content-Type": "audio/wav", "Access-Control-Allow-Origin": "*" }
+    });
+  }
+}
